@@ -15,9 +15,9 @@ args = parser.parse_args()
 
 def validate_port(portNumber):
     try:
-        if PortNumber < 1 or PortNumber > 65535:
+        if portNumber < 1 or portNumber > 65535:
             raise Exception()
-        return PortNumber
+        return portNumber
     except Exception as error:
         sys.stderr.write("ERROR: This is NOT a valid port number.\n")
         sys.stderr.flush()

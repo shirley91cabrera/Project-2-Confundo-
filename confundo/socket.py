@@ -127,8 +127,12 @@ class Socket:
         else:
             self.sock.sendto(packet.encode(), self.lastFromAddr)
 
-        self.seqNum = increaseSeqNumber(self.seqNum)  
         print(format_line("SEND", packet, -1, -1))
+
+
+        self.seqNum = increaseSeqNumber(self.seqNum)  
+        if synPkt.isAck:
+            self.lastAckTime = time.time()
 
 
     def _recv(self):
@@ -216,12 +220,14 @@ class Socket:
             isSyn = True, 
             isAck = self.synReceived
         )
+
+        sys.stderr.write(str(synPkt))
         self._send(synPkt)
+
         self.state = State.SYN
 
 
     def expectSynAck(self):
-        ### MAY NEED FIXES IN THIS METHOD
         startTime = time.time()
         while True:
             pkt = self._recv()

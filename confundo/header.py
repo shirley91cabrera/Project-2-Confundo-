@@ -14,6 +14,9 @@
 
 import struct
 
+
+HEADER_FORMAT = "!IIHH"
+
 class Header:
     '''Abstraction to handle Confundo header'''
 
@@ -33,15 +36,15 @@ class Header:
             flags = flags | (1 << 1)
         if self.isFin:
             flags = flags | (1)
-        return struct.pack("!IIHH",
+        return struct.pack(HEADER_FORMAT,
                            self.seqNum, self.ackNum,
                            self.connId, flags)
 
     def decode(self, packet):
-        (self.seqNum, self.ackNum, self.connId, flags) = struct.unpack("!IIHH", packet)
-        self.isAck = flags & (1 << 2)
-        self.isSyn = flags & (1 << 1)
-        self.isFin = flags & (1)
+        (self.seqNum, self.ackNum, self.connId, flags) = struct.unpack(HEADER_FORMAT, packet)
+        self.isAck = bool(flags & (1 << 2))
+        self.isSyn = bool(flags & (1 << 1))
+        self.isFin = bool(flags & (1))
 
     def __str__(self):
         s = f"{self.seqNum} {self.ackNum} {self.connId}"

@@ -29,10 +29,10 @@ class Socket:
     def __init__(self, connId=0, inSeq=None, synReceived=False, sock=socket.socket(socket.AF_INET, socket.SOCK_DGRAM), noClose=False):
         self.sock = sock
         self.connId = connId
-        self.sock.settimeout(0.5)
-        self.timeout = 10
+        self.sock.settimeout(RETX_TIME)
+        self.timeout = GLOBAL_TIMEOUT
 
-        self.base = 12345
+        self.base = MAX_SEQNO
         self.seqNum = self.base
 
         self.inSeq = inSeq
@@ -48,10 +48,13 @@ class Socket:
         self.finReceived = False
 
         self.remote = None
+        self.lastFromAddr = None
         self.noClose = noClose
 
+    
     def __enter__(self):
         return self
+
 
     def __exit__(self, exception_type, exception_value, traceback):
         if self.state == State.OPEN:
@@ -60,12 +63,14 @@ class Socket:
             return
         self.sock.close()
 
+
     def connect(self, endpoint):
         remote = socket.getaddrinfo(endpoint[0], endpoint[1], family=socket.AF_INET, type=socket.SOCK_DGRAM)
         (family, type, proto, canonname, sockaddr) = remote[0]
 
         return self._connect(sockaddr)
 
+ 
     def bind(self, endpoint):
         if self.state != State.INVALID:
             raise RuntimeError()
@@ -76,10 +81,12 @@ class Socket:
         self.sock.bind(sockaddr)
         self.state = State.LISTEN
 
+
     def listen(self, queue):
         if self.state != State.LISTEN:
             raise RuntimeError("Cannot listen")
         pass
+
 
     def accept(self):
         if self.state != State.LISTEN:
@@ -95,14 +102,22 @@ class Socket:
             pkt = self._recv()
             if pkt and pkt.isSyn:
                 hadNewConnId = True
-                ### UPDATE CORRECTLY HERE
-                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=????, noClose=True)
-                # at this point, syn was received, ack for syn was sent, now need to send our SYN and wait for ACK
+                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=0, noClose=True)
+                # ack_packet = Packet()
+                # ack_packet.isAck = True
+                # ack_packet.isSyn = True
+                # ack_packet.connId = self.connId
+                # self.seqNum = 0
+                # ack_packet.seqNum = self.seqNum
+                # ack_packet.ackNum = pkt.seqNum
+                # self._send()
                 clientSock._connect(self.lastFromAddr)
                 return clientSock
 
+
     def settimeout(self, timeout):
         self.timeout = timeout
+
 
     def _send(self, packet):
         '''"Private" method to send packet out'''
@@ -111,7 +126,10 @@ class Socket:
             self.sock.sendto(packet.encode(), self.remote)
         else:
             self.sock.sendto(packet.encode(), self.lastFromAddr)
+
+        self.seqNum = increaseSeqNumber(self.seqNum)  
         print(format_line("SEND", packet, -1, -1))
+
 
     def _recv(self):
         '''"Private" method to receive incoming packets'''
@@ -169,6 +187,7 @@ class Socket:
 
         return inPkt
 
+
     def _connect(self, remote):
         self.remote = remote
 
@@ -176,9 +195,8 @@ class Socket:
             raise RuntimeError("Trying to connect, but socket is already opened")
 
         self.sendSynPacket()
-        self.state = State.SYN
-
         self.expectSynAck()
+
 
     def close(self):
         if self.state != State.OPEN:
@@ -189,11 +207,18 @@ class Socket:
 
         self.expectFinAck()
 
+
     def sendSynPacket(self):
-        synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isSyn=True)
-        ### UPDATE CORRECTLY HERE
-        ### self.seqNum = ???
+        synPkt = Packet(
+            seqNum = self.seqNum,
+            ackNum = increaseSeqNumber(self.inSeq) if self.synReceived else 0,
+            connId= self.connId if self.synReceived else 0, 
+            isSyn = True, 
+            isAck = self.synReceived
+        )
         self._send(synPkt)
+        self.state = State.SYN
+
 
     def expectSynAck(self):
         ### MAY NEED FIXES IN THIS METHOD
@@ -208,11 +233,13 @@ class Socket:
                 self.state = State.ERROR
                 raise RuntimeError("timeout")
 
+
     def sendFinPacket(self):
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isFin=True)
         ### UPDATE CORRECTLY HERE
         ### self.seqNum = ???
         self._send(synPkt)
+
 
     def expectFinAck(self):
         ### MAY NEED FIXES IN THIS METHOD
@@ -225,6 +252,7 @@ class Socket:
                 break
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 return
+
 
     def recv(self, maxSize):
         startTime = time.time()
@@ -242,6 +270,7 @@ class Socket:
             self.inBuffer = self.inBuffer[actualResponseSize:]
 
             return response
+
 
     def send(self, data):
         '''

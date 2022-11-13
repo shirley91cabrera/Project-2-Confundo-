@@ -23,6 +23,7 @@ def validate_port(portNumber):
         sys.stderr.flush()
         sys.exit(1)
 
+        
 def sendFile(connection_socket, fileName: str):
     with open(fileName, "rb") as f:
         data = f.read(READ_BUFFER)

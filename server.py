@@ -2,21 +2,66 @@
 
 import sys
 import argparse
-import socket
 import signal
 
 import confundo
 
-# for testing, replace socket.socket with confundo.Socket()
-# or just use the reference server (check Piazza or consult the instructor)
+not_stopped = True
 
-# the server can only work in a single threaded mode, one client at a time (no parallel,
-# neither concurrent nor threaded---simplifications in the socket implementation)
+parser = argparse.ArgumentParser("Parser")
+parser.add_argument("port", help="Set Port Number", type=int)
+args = parser.parse_args()
 
-# Other than that, standard socket interface should work
+def validate_port(portNumber):
+    try:
+        if PortNumber < 1 or PortNumber > 65535:
+            raise Exception()
+        return PortNumber
+    except Exception as error:
+        sys.stderr.write("ERROR: This is NOT a valid port number.\n")
+        sys.stderr.flush()
+        sys.exit(1)
+
+def signalHandlers(signum_, frame_):
+    global not_stopped
+    not_stopped = False
+    exit(0)
+
+
+def handleSignals():
+    signal.signal(signal.SIGINT, signalHandlers)
+    signal.signal(signal.SIGTERM, signalHandlers)
+    signal.signal(signal.SIGQUIT, signalHandlers)
+
+
+def processConnection(clientSocket):
+    while True:
+        try:
+            message = clientSocket.recv(BUFFER_SIZE)
+            clientSocket.settimeout(GLOBAL_TIMEOUT)
+            if not message:
+                break
+        except Exception as error:
+            sys.stderr.write("ERROR: Could not receive file")
+
 
 def start():
-    pass
+    global not_stopped
+    handleSignals()
+
+    try:
+        port = validate_port(args.port)
+        with confundo.Socket() as server:
+            server.bind(("0.0.0.0", port))
+
+            while not_stopped:
+                server.listen(10)
+                with server.accept() as clientSocket:
+                    processConnection(clientSocket)
+
+    except RuntimeError as e:
+        sys.stderr.write(f"ERROR: {e}\n")
+        sys.exit(1)
 
 if __name__ == '__main__':
     start()

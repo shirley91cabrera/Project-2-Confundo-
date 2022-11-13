@@ -1,4 +1,4 @@
-
+from .common import *
 
 def format_line(command, pkt, cwnd, ssthresh):
     s = f"{command} {pkt.seqNum} {pkt.ackNum} {pkt.connId} {int(cwnd)} {ssthresh}"
@@ -7,3 +7,7 @@ def format_line(command, pkt, cwnd, ssthresh):
     if pkt.isFin: s = s + " FIN"
     if pkt.isDup: s = s + " DUP"
     return s
+
+
+def increaseSeqNumber(seqNumber):
+    return (seqNumber + 1) % MAX_SEQNO 

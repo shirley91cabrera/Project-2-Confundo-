@@ -23,7 +23,7 @@ def validate_port(portNumber):
         sys.stderr.flush()
         sys.exit(1)
 
-        
+
 def sendFile(connection_socket, fileName: str):
     with open(fileName, "rb") as f:
         data = f.read(READ_BUFFER)
@@ -40,11 +40,11 @@ def start():
     try:
         with confundo.Socket() as socket:
             port = validate_port(args.port)
-            socket.settimeout(GLOBAL_TIMEOUT)
+            socket.settimeout(confundo.GLOBAL_TIMEOUT)
             socket.connect((args.host, port))
             sendFile(socket, args.file)
                 
-    except Exception as error:
+    except RuntimeError as error:
         sys.stderr.write(f"ERROR: {error}\n")
         sys.exit(1)
 

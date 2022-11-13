@@ -19,7 +19,6 @@ def validate_port(portNumber):
         return PortNumber
     except Exception as error:
         sys.stderr.write("ERROR: This is NOT a valid port number.\n")
-        sys.stderr.flush()
         sys.exit(1)
 
 def signalHandlers(signum_, frame_):

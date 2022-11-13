@@ -21,6 +21,7 @@ def validate_port(portNumber):
         sys.stderr.write("ERROR: This is NOT a valid port number.\n")
         sys.exit(1)
 
+
 def signalHandlers(signum_, frame_):
     global not_stopped
     not_stopped = False
@@ -35,13 +36,10 @@ def handleSignals():
 
 def processConnection(clientSocket):
     while True:
-        try:
-            message = clientSocket.recv(BUFFER_SIZE)
-            clientSocket.settimeout(GLOBAL_TIMEOUT)
-            if not message:
-                break
-        except Exception as error:
-            sys.stderr.write("ERROR: Could not receive file")
+        message = clientSocket.recv(BUFFER_SIZE)
+        clientSocket.settimeout(GLOBAL_TIMEOUT)
+        if not message:
+            break
 
 
 def start():

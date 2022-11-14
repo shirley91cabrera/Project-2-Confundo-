@@ -65,7 +65,7 @@ class Socket:
 
 
     def connect(self, endpoint):
-        # print("<<<DEBUG>>> connect method")
+        print("<<<DEBUG>>> connect method")
         remote = socket.getaddrinfo(endpoint[0], endpoint[1], family=socket.AF_INET, type=socket.SOCK_DGRAM)
         (family, type, proto, canonname, sockaddr) = remote[0]
 
@@ -90,7 +90,7 @@ class Socket:
 
 
     def accept(self):
-        # print("<<<DEBUG>>> accept method")
+        print("<<<DEBUG>>> accept method")
         if self.state != State.LISTEN:
             raise RuntimeError("Cannot accept")
 
@@ -120,7 +120,7 @@ class Socket:
 
 
     def _send(self, packet):
-        # print("<<<DEBUG>>> _send method")
+        print("<<<DEBUG>>> _send method")
         '''"Private" method to send packet out'''
 
         if self.remote:
@@ -131,21 +131,18 @@ class Socket:
         # TODO: Add Congestion control
         print(format_line("SEND", packet, -1, -1))
 
-        self.seqNum = increaseSeqNumber(self.seqNum)  
         if packet.isAck:
             self.lastAckTime = time.time()
 
 
     def _recv(self):
-        # print("<<<DEBUG>>> _recv method")
+        print("<<<DEBUG>>> _recv method")
         '''"Private" method to receive incoming packets'''
 
         try:
             (inPacket, self.lastFromAddr) = self.sock.recvfrom(MAX_PKT_SIZE)
         except socket.error as e:
             return None
-
-        ### TODO dispatch based on fromAddr... and it can only be done from the "parent" socket
 
         inPkt = Packet().decode(inPacket)
         print(format_line("RECV", inPkt, -1, -1))
@@ -192,7 +189,7 @@ class Socket:
 
 
     def _connect(self, remote):
-        # print("<<<DEBUG>>> _connect method")
+        print("<<<DEBUG>>> _connect method")
         self.remote = remote
 
         if self.state != State.INVALID:
@@ -213,7 +210,7 @@ class Socket:
 
 
     def sendSynPacket(self):
-        # print("<<<DEBUG>>> sendSynPacket method")
+        print("<<<DEBUG>>> sendSynPacket method")
         synPkt = Packet(
             seqNum = self.seqNum,
             ackNum = self.inSeq if self.synReceived else 0,
@@ -222,15 +219,18 @@ class Socket:
             isAck = self.synReceived
         )
 
+        self.seqNum = increaseSeqNumber(self.seqNum)
         self._send(synPkt)
         self.state = State.SYN
 
 
     def expectSynAck(self):
-        # print("<<<DEBUG>>> expectSynAck method")
+        print("<<<DEBUG>>> expectSynAck method")
         startTime = time.time()
         while True:
             pkt = self._recv()
+
+            print("<<<DEBUG>>> expectSynAck method -> " + str(self.seqNum) + " " + str(pkt))
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
                 self.state = State.OPEN
@@ -239,11 +239,12 @@ class Socket:
                 self.state = State.ERROR
                 raise RuntimeError("timeout")
 
+        print("<<<DEBUG>>> expectSynAck method -> Out of the loop")
+
 
     def sendFinPacket(self):
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isFin=True)
-        ### UPDATE CORRECTLY HERE
-        ### self.seqNum = ???
+        self.seqNum = increaseSeqNumber(self.seqNum)  
         self._send(synPkt)
 
 
@@ -279,7 +280,7 @@ class Socket:
 
 
     def send(self, data):
-        # print("<<<DEBUG>>> send method")
+        print("<<<DEBUG>>> send method")
         '''
         This is one of the methods that require fixes.  Besides the marked place where you need
         to figure out proper updates (to make basic transfer work), this method is the place
@@ -298,6 +299,7 @@ class Socket:
         while len(self.outBuffer) > 0:
             toSend = self.outBuffer[:MTU]
             pkt = Packet(seqNum=self.base, connId=self.connId, payload=toSend)
+            self.seqNum = increaseSeqNumber(self.seqNum)  
             self._send(pkt)
 
             pkt = self._recv()  # if within RTO we didn't receive packets, things will be retransmitted

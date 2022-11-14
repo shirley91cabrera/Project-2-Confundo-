@@ -29,15 +29,15 @@ class Socket:
     def __init__(self, connId=0, inSeq=None, synReceived=False, sock=socket.socket(socket.AF_INET, socket.SOCK_DGRAM), noClose=False):
         self.sock = sock
         self.connId = connId
-        self.sock.settimeout(RETX_TIME)
-        self.timeout = GLOBAL_TIMEOUT
+        self.sock.settimeout(0.5)
+        self.timeout = 10
 
-        self.base = 0 # Last ACKed seqNumber
+        self.base = 12345
         self.seqNum = self.base
 
-        self.inSeq = inSeq # Next seq number to be received 
+        self.inSeq = inSeq
 
-        self.lastAckTime = time.time() # Last time ACK was sent / activity timer
+        self.lastAckTime = time.time() # last time ACK was sent / activity timer
         self.cc = CwndControl()
         self.outBuffer = b""
         self.inBuffer = b""
@@ -47,14 +47,11 @@ class Socket:
         self.synReceived = synReceived
         self.finReceived = False
 
-        self.remote = None # Server we are connected to.
-        self.lastFromAddr = None # Last address we  communicated with.
+        self.remote = None
         self.noClose = noClose
 
-    
     def __enter__(self):
         return self
-
 
     def __exit__(self, exception_type, exception_value, traceback):
         if self.state == State.OPEN:
@@ -63,15 +60,12 @@ class Socket:
             return
         self.sock.close()
 
-
     def connect(self, endpoint):
-        print("<<<DEBUG>>> connect method")
         remote = socket.getaddrinfo(endpoint[0], endpoint[1], family=socket.AF_INET, type=socket.SOCK_DGRAM)
         (family, type, proto, canonname, sockaddr) = remote[0]
 
         return self._connect(sockaddr)
 
- 
     def bind(self, endpoint):
         if self.state != State.INVALID:
             raise RuntimeError()
@@ -82,15 +76,12 @@ class Socket:
         self.sock.bind(sockaddr)
         self.state = State.LISTEN
 
-
     def listen(self, queue):
         if self.state != State.LISTEN:
             raise RuntimeError("Cannot listen")
         pass
 
-
     def accept(self):
-        print("<<<DEBUG>>> accept method")
         if self.state != State.LISTEN:
             raise RuntimeError("Cannot accept")
 
@@ -104,43 +95,28 @@ class Socket:
             pkt = self._recv()
             if pkt and pkt.isSyn:
                 hadNewConnId = True
-                clientSock = Socket(
-                    connId = self.connId, 
-                    synReceived=True, 
-                    sock=self.sock, 
-                    inSeq=increaseSeqNumber(pkt.seqNum), 
-                    noClose=True
-                )
+                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=increaseSeqNumber(pkt.seqNum), noClose=True)
+                # at this point, syn was received, ack for syn was sent, now need to send our SYN and wait for ACK
                 clientSock._connect(self.lastFromAddr)
                 return clientSock
-
 
     def settimeout(self, timeout):
         self.timeout = timeout
 
-
     def _send(self, packet):
-        print("<<<DEBUG>>> _send method")
         '''"Private" method to send packet out'''
 
         if self.remote:
             self.sock.sendto(packet.encode(), self.remote)
         else:
             self.sock.sendto(packet.encode(), self.lastFromAddr)
-
-        # TODO: Add Congestion control
         print(format_line("SEND", packet, -1, -1))
 
-        if packet.isAck:
-            self.lastAckTime = time.time()
-
-
     def _recv(self):
-        print("<<<DEBUG>>> _recv method")
         '''"Private" method to receive incoming packets'''
 
         try:
-            (inPacket, self.lastFromAddr) = self.sock.recvfrom(MAX_PKT_SIZE)
+            (inPacket, self.lastFromAddr) = self.sock.recvfrom(1024)
         except socket.error as e:
             return None
 
@@ -150,10 +126,9 @@ class Socket:
         outPkt = None
         if inPkt.isSyn and self.remote is not None: # Avoid sendind just ACK from the server during handshake
             self.inSeq = increaseSeqNumber(inPkt.seqNum)
-            self.synReceived = True
-
             if inPkt.connId != 0:
                 self.connId = inPkt.connId
+            self.synReceived = True
 
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
@@ -178,26 +153,26 @@ class Socket:
                 self.inSeq = increaseSeqNumber(inPkt.seqNum)
                 self.inBuffer += inPkt.payload
             else:
+                # don't advance, which means we will send a duplicate ACK
                 pass
 
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
-        if outPkt: # TODO: check if is handshake from server in order to skip this.
+        if outPkt:
             self._send(outPkt)
 
         return inPkt
 
-
     def _connect(self, remote):
-        print("<<<DEBUG>>> _connect method")
         self.remote = remote
 
         if self.state != State.INVALID:
             raise RuntimeError("Trying to connect, but socket is already opened")
 
         self.sendSynPacket()
-        self.expectSynAck()
+        self.state = State.SYN
 
+        self.expectSynAck()
 
     def close(self):
         if self.state != State.OPEN:
@@ -208,29 +183,16 @@ class Socket:
 
         self.expectFinAck()
 
-
     def sendSynPacket(self):
-        print("<<<DEBUG>>> sendSynPacket method")
-        synPkt = Packet(
-            seqNum = self.seqNum,
-            ackNum = self.inSeq if self.synReceived else 0,
-            connId= self.connId if self.synReceived else 0, 
-            isSyn = True, 
-            isAck = self.synReceived
-        )
-
-        self.seqNum = increaseSeqNumber(self.seqNum)
+        synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isSyn=True)
+        self.seqNum = MAX_SEQNO
         self._send(synPkt)
-        self.state = State.SYN
-
 
     def expectSynAck(self):
-        print("<<<DEBUG>>> expectSynAck method")
+        ### MAY NEED FIXES IN THIS METHOD
         startTime = time.time()
         while True:
             pkt = self._recv()
-
-            print("<<<DEBUG>>> expectSynAck method -> " + str(self.seqNum) + " " + str(pkt))
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
                 self.state = State.OPEN
@@ -239,14 +201,10 @@ class Socket:
                 self.state = State.ERROR
                 raise RuntimeError("timeout")
 
-        print("<<<DEBUG>>> expectSynAck method -> Out of the loop")
-
-
     def sendFinPacket(self):
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isFin=True)
-        self.seqNum = increaseSeqNumber(self.seqNum)  
+        self.seqNum = increaseSeqNumber(self.seqNum)
         self._send(synPkt)
-
 
     def expectFinAck(self):
         ### MAY NEED FIXES IN THIS METHOD
@@ -259,7 +217,6 @@ class Socket:
                 break
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 return
-
 
     def recv(self, maxSize):
         startTime = time.time()
@@ -278,9 +235,7 @@ class Socket:
 
             return response
 
-
     def send(self, data):
-        print("<<<DEBUG>>> send method")
         '''
         This is one of the methods that require fixes.  Besides the marked place where you need
         to figure out proper updates (to make basic transfer work), this method is the place
@@ -299,19 +254,21 @@ class Socket:
         while len(self.outBuffer) > 0:
             toSend = self.outBuffer[:MTU]
             pkt = Packet(seqNum=self.base, connId=self.connId, payload=toSend)
-            self.seqNum = increaseSeqNumber(self.seqNum)  
+            self.seqNum = increaseSeqNumber(self.seqNum)
             self._send(pkt)
 
             pkt = self._recv()  # if within RTO we didn't receive packets, things will be retransmitted
             if pkt and pkt.isAck:
-                advanceAmount = MTU # FIX: this ??? -> if pkt.ackNum == self.seqNum else 0 
+                # TODO: FIX THIS
+                advanceAmount = MTU
                 if advanceAmount == 0:
                     self.nDupAcks += 1
                 else:
                     self.nDupAcks = 0
 
                 self.outBuffer = self.outBuffer[advanceAmount:]
-                self.base = pkt.ackNum
+                ### UPDATE CORRECTLY HERE
+                ### self.base = ???
 
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR

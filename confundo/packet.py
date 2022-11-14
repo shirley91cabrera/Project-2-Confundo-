@@ -2,6 +2,7 @@
 # Copyright 2019 Alex Afanasyev
 #
 
+from .common import *
 from .header import Header
 
 class Packet(Header):
@@ -13,8 +14,8 @@ class Packet(Header):
         self.isDup = isDup # only for printing flags
 
     def decode(self, fullPacket):
-        super(Packet, self).decode(fullPacket[0:12])
-        self.payload = fullPacket[12:]
+        super(Packet, self).decode(fullPacket[0:HEADER_SIZE])
+        self.payload = fullPacket[HEADER_SIZE:]
         return self
 
     def encode(self):

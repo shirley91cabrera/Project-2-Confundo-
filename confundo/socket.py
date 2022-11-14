@@ -123,16 +123,16 @@ class Socket:
         inPkt = Packet().decode(inPacket)
         print(format_line("RECV", inPkt, -1, -1))
 
-        # print("<<<DEBUG>>> _recv method: " + str(inPkt.seqNum) + ", " + str(self.inSeq))
 
         outPkt = None
-        if inPkt.isSyn and self.remote is not None: # Avoid sendind just ACK from the server during handshake
+        if inPkt.isSyn: 
             self.inSeq = increaseSeqNumber(inPkt.seqNum)
             if inPkt.connId != 0:
                 self.connId = inPkt.connId
             self.synReceived = True
 
-            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
+            if self.remote is not None: # Avoid sendind just ACK from the server during handshake
+                outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
         elif inPkt.isFin:
             if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
@@ -159,11 +159,13 @@ class Socket:
                 pass
 
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
+        elif inPkt.isAck:
+            self.inSeq = increaseSeqNumber(inPkt.seqNum)
 
         if outPkt:
             self.seqNum = increaseSeqNumber(self.seqNum)
             self._send(outPkt)
-
+            
         return inPkt
 
     def _connect(self, remote):
@@ -220,7 +222,6 @@ class Socket:
         startTime = time.time()
         while True:
             pkt = self._recv()
-            # print("<<<DEBUG>>> expectFinAck method -> " + str(self.seqNum) + ", " + str(pkt))
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
                 self.state = State.CLOSED
@@ -228,7 +229,6 @@ class Socket:
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 return
 
-        # print("<<<DEBUG>>> expectFinAck method -> Out of the loop")
 
     def recv(self, maxSize):
         startTime = time.time()

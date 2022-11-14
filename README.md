@@ -23,11 +23,10 @@ path to the `confundo.lua` script:
 To dissect tcpdump-recorded file, you can use `-r <pcapfile>` option. For example:
 
     wireshark -X lua_script:./confundo.lua -r confundo.pcap
+    
+## Project Report
 
-## TODO
-
-    ###########################################################
-    ##                                                       ##
-    ## REPLACE CONTENT OF THIS FILE WITH YOUR PROJECT REPORT ##
-    ##                                                       ##
-    ###########################################################
+   * Shirley Cabrera, PID: 6119474
+   * Hgh Level Design: Followed provided esqueleton.
+   * Did not run into any problem. Jusat struggle with make the concepts work for both client and server.
+   * Did not added any new library nor used any external sources.

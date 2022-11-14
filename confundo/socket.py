@@ -65,7 +65,7 @@ class Socket:
 
 
     def connect(self, endpoint):
-        print("<<<DEBUG>>> connect method")
+        # print("<<<DEBUG>>> connect method")
         remote = socket.getaddrinfo(endpoint[0], endpoint[1], family=socket.AF_INET, type=socket.SOCK_DGRAM)
         (family, type, proto, canonname, sockaddr) = remote[0]
 
@@ -90,7 +90,7 @@ class Socket:
 
 
     def accept(self):
-        print("<<<DEBUG>>> accept method")
+        # print("<<<DEBUG>>> accept method")
         if self.state != State.LISTEN:
             raise RuntimeError("Cannot accept")
 
@@ -120,7 +120,7 @@ class Socket:
 
 
     def _send(self, packet):
-        print("<<<DEBUG>>> _send method")
+        # print("<<<DEBUG>>> _send method")
         '''"Private" method to send packet out'''
 
         if self.remote:
@@ -137,7 +137,7 @@ class Socket:
 
 
     def _recv(self):
-        print("<<<DEBUG>>> _recv method")
+        # print("<<<DEBUG>>> _recv method")
         '''"Private" method to receive incoming packets'''
 
         try:
@@ -192,7 +192,7 @@ class Socket:
 
 
     def _connect(self, remote):
-        print("<<<DEBUG>>> _connect method")
+        # print("<<<DEBUG>>> _connect method")
         self.remote = remote
 
         if self.state != State.INVALID:
@@ -213,7 +213,7 @@ class Socket:
 
 
     def sendSynPacket(self):
-        print("<<<DEBUG>>> sendSynPacket method")
+        # print("<<<DEBUG>>> sendSynPacket method")
         synPkt = Packet(
             seqNum = self.seqNum,
             ackNum = self.inSeq if self.synReceived else 0,
@@ -227,7 +227,7 @@ class Socket:
 
 
     def expectSynAck(self):
-        print("<<<DEBUG>>> expectSynAck method")
+        # print("<<<DEBUG>>> expectSynAck method")
         startTime = time.time()
         while True:
             pkt = self._recv()
@@ -279,7 +279,7 @@ class Socket:
 
 
     def send(self, data):
-        print("<<<DEBUG>>> send method")
+        # print("<<<DEBUG>>> send method")
         '''
         This is one of the methods that require fixes.  Besides the marked place where you need
         to figure out proper updates (to make basic transfer work), this method is the place

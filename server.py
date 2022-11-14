@@ -36,8 +36,8 @@ def handleSignals():
 
 def processConnection(clientSocket):
     while True:
-        message = clientSocket.recv(BUFFER_SIZE)
-        clientSocket.settimeout(GLOBAL_TIMEOUT)
+        message = clientSocket.recv(confundo.MAX_PKT_SIZE)
+        clientSocket.settimeout(confundo.GLOBAL_TIMEOUT)
         if not message:
             break
 
@@ -52,7 +52,6 @@ def start():
             server.bind(("0.0.0.0", port))
 
             while not_stopped:
-                server.listen(10)
                 with server.accept() as clientSocket:
                     processConnection(clientSocket)
 

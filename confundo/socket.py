@@ -29,10 +29,10 @@ class Socket:
     def __init__(self, connId=0, inSeq=None, synReceived=False, sock=socket.socket(socket.AF_INET, socket.SOCK_DGRAM), noClose=False):
         self.sock = sock
         self.connId = connId
-        self.sock.settimeout(0.5)
-        self.timeout = 10
+        self.sock.settimeout(RETX_TIME)
+        self.timeout = GLOBAL_TIMEOUT
 
-        self.base = 12345
+        self.base = MAX_SEQNO
         self.seqNum = self.base
 
         self.inSeq = inSeq
@@ -116,7 +116,7 @@ class Socket:
         '''"Private" method to receive incoming packets'''
 
         try:
-            (inPacket, self.lastFromAddr) = self.sock.recvfrom(1024)
+            (inPacket, self.lastFromAddr) = self.sock.recvfrom(MAX_PKT_SIZE)
         except socket.error as e:
             return None
 

@@ -102,15 +102,7 @@ class Socket:
             pkt = self._recv()
             if pkt and pkt.isSyn:
                 hadNewConnId = True
-                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=0, noClose=True)
-                # ack_packet = Packet()
-                # ack_packet.isAck = True
-                # ack_packet.isSyn = True
-                # ack_packet.connId = self.connId
-                # self.seqNum = 0
-                # ack_packet.seqNum = self.seqNum
-                # ack_packet.ackNum = pkt.seqNum
-                # self._send()
+                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=pkt.seqNum, noClose=True)
                 clientSock._connect(self.lastFromAddr)
                 return clientSock
 
@@ -127,11 +119,11 @@ class Socket:
         else:
             self.sock.sendto(packet.encode(), self.lastFromAddr)
 
+        # TODO: Add Congestion control
         print(format_line("SEND", packet, -1, -1))
 
-
         self.seqNum = increaseSeqNumber(self.seqNum)  
-        if synPkt.isAck:
+        if packet.isAck:
             self.lastAckTime = time.time()
 
 
@@ -139,7 +131,7 @@ class Socket:
         '''"Private" method to receive incoming packets'''
 
         try:
-            (inPacket, self.lastFromAddr) = self.sock.recvfrom(1024)
+            (inPacket, self.lastFromAddr) = self.sock.recvfrom(MAX_PKT_SIZE)
         except socket.error as e:
             return None
 
@@ -150,24 +142,25 @@ class Socket:
 
         outPkt = None
         if inPkt.isSyn:
-            ### UPDATE CORRECTLY HERE
-            ### self.inSeq = ???
-            if inPkt.connId != 0:
-                self.connId = inPkt.connId
+            self.inSeq = inPkt.seqNum
             self.synReceived = True
 
-            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
-
-        elif inPkt.isFin:
-            if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
-                ### UPDATE CORRECTLY HERE
-                ### self.inSeq = ???
-                self.finReceived = True
-            else:
-                # don't advance, which means we will send a duplicate ACK
-                pass
+            if inPkt.connId != 0:
+                self.connId = inPkt.connId
+            
 
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
+
+        # elif inPkt.isFin:
+        #     if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
+        #         ### UPDATE CORRECTLY HERE
+        #         ### self.inSeq = ???
+        #         self.finReceived = True
+        #     else:
+        #         # don't advance, which means we will send a duplicate ACK
+        #         pass
+
+        #     outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
         elif len(inPkt.payload) > 0:
             if not self.synReceived:
@@ -177,11 +170,9 @@ class Socket:
                 raise RuntimeError("Received data after getting FIN (incoming connection closed)")
 
             if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
-                ### UPDATE CORRECTLY HERE
-                ### self.inSeq = ???
+                self.inSeq += 1
                 self.inBuffer += inPkt.payload
             else:
-                # don't advance, which means we will send a duplicate ACK
                 pass
 
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
@@ -221,7 +212,6 @@ class Socket:
             isAck = self.synReceived
         )
 
-        sys.stderr.write(str(synPkt))
         self._send(synPkt)
 
         self.state = State.SYN

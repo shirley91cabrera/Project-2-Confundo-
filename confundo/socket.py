@@ -123,6 +123,8 @@ class Socket:
         inPkt = Packet().decode(inPacket)
         print(format_line("RECV", inPkt, -1, -1))
 
+        # print("<<<DEBUG>>> _recv method: " + str(inPkt.seqNum) + ", " + str(self.inSeq))
+
         outPkt = None
         if inPkt.isSyn and self.remote is not None: # Avoid sendind just ACK from the server during handshake
             self.inSeq = increaseSeqNumber(inPkt.seqNum)
@@ -159,6 +161,7 @@ class Socket:
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
         if outPkt:
+            self.seqNum = increaseSeqNumber(self.seqNum)
             self._send(outPkt)
 
         return inPkt
@@ -184,16 +187,22 @@ class Socket:
         self.expectFinAck()
 
     def sendSynPacket(self):
-        synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isSyn=True)
-        self.seqNum = MAX_SEQNO
+        synPkt = Packet(
+            seqNum = self.seqNum,
+            ackNum = self.inSeq if self.synReceived else 0,
+            connId= self.connId if self.synReceived else 0, 
+            isSyn = True, 
+            isAck = self.synReceived
+        )
+        self.seqNum = increaseSeqNumber(self.seqNum)
         self._send(synPkt)
 
     def expectSynAck(self):
         ### MAY NEED FIXES IN THIS METHOD
-        startTime = time.time()
+        startTime = time.time()        
         while True:
             pkt = self._recv()
-            if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
+            if pkt and pkt.isAck and (pkt.ackNum == self.seqNum or (pkt.isSyn and pkt.ackNum == self.seqNum - 1)):
                 self.base = self.seqNum
                 self.state = State.OPEN
                 break
@@ -211,12 +220,15 @@ class Socket:
         startTime = time.time()
         while True:
             pkt = self._recv()
+            # print("<<<DEBUG>>> expectFinAck method -> " + str(self.seqNum) + ", " + str(pkt))
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
                 self.state = State.CLOSED
                 break
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 return
+
+        # print("<<<DEBUG>>> expectFinAck method -> Out of the loop")
 
     def recv(self, maxSize):
         startTime = time.time()
@@ -267,8 +279,7 @@ class Socket:
                     self.nDupAcks = 0
 
                 self.outBuffer = self.outBuffer[advanceAmount:]
-                ### UPDATE CORRECTLY HERE
-                ### self.base = ???
+                self.base = self.seqNum
 
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR

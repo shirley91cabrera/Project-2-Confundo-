@@ -24,12 +24,14 @@ def validate_port(portNumber):
         sys.exit(1)
 
 
-def sendFile(connection_socket, fileName: str):
+def sendFile(socket, fileName: str):
     with open(fileName, "rb") as f:
         data = f.read(confundo.READ_BUFFER)
         while data:
+            total_sent = 0
             while total_sent < len(data):
-                socket.send(data[total_sent:])
+                sent = socket.send(data[total_sent:])
+                total_sent += sent
             
             data = f.read(confundo.READ_BUFFER)
 

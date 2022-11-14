@@ -65,6 +65,7 @@ class Socket:
 
 
     def connect(self, endpoint):
+        sys.stderr.write("START connection from client")
         remote = socket.getaddrinfo(endpoint[0], endpoint[1], family=socket.AF_INET, type=socket.SOCK_DGRAM)
         (family, type, proto, canonname, sockaddr) = remote[0]
 
@@ -89,6 +90,7 @@ class Socket:
 
 
     def accept(self):
+        sys.stderr.write("ACCEPT connection from client")
         if self.state != State.LISTEN:
             raise RuntimeError("Cannot accept")
 
@@ -102,7 +104,13 @@ class Socket:
             pkt = self._recv()
             if pkt and pkt.isSyn:
                 hadNewConnId = True
-                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=pkt.seqNum, noClose=True)
+                clientSock = Socket(
+                    connId = self.connId, 
+                    synReceived=True, 
+                    sock=self.sock, 
+                    inSeq=increaseSeqNumber(pkt.seqNum), 
+                    noClose=True
+                )
                 clientSock._connect(self.lastFromAddr)
                 return clientSock
 
@@ -142,7 +150,7 @@ class Socket:
 
         outPkt = None
         if inPkt.isSyn:
-            self.inSeq = inPkt.seqNum
+            self.inSeq = increaseSeqNumber(inPkt.seqNum)
             self.synReceived = True
 
             if inPkt.connId != 0:
@@ -151,16 +159,15 @@ class Socket:
 
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
-        # elif inPkt.isFin:
-        #     if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
-        #         ### UPDATE CORRECTLY HERE
-        #         ### self.inSeq = ???
-        #         self.finReceived = True
-        #     else:
-        #         # don't advance, which means we will send a duplicate ACK
-        #         pass
+        elif inPkt.isFin:
+            if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
+                self.inSeq = increaseSeqNumber(inPkt.seqNum)
+                self.finReceived = True
+            else:
+                # don't advance, which means we will send a duplicate ACK
+                pass
 
-        #     outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
+            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
         elif len(inPkt.payload) > 0:
             if not self.synReceived:
@@ -170,7 +177,7 @@ class Socket:
                 raise RuntimeError("Received data after getting FIN (incoming connection closed)")
 
             if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
-                self.inSeq += 1
+                self.inSeq = increaseSeqNumber(inPkt.seqNum)
                 self.inBuffer += inPkt.payload
             else:
                 pass
@@ -206,14 +213,13 @@ class Socket:
     def sendSynPacket(self):
         synPkt = Packet(
             seqNum = self.seqNum,
-            ackNum = increaseSeqNumber(self.inSeq) if self.synReceived else 0,
+            ackNum = self.inSeq if self.synReceived else 0,
             connId= self.connId if self.synReceived else 0, 
             isSyn = True, 
             isAck = self.synReceived
         )
 
         self._send(synPkt)
-
         self.state = State.SYN
 
 

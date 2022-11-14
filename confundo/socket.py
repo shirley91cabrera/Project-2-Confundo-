@@ -32,7 +32,7 @@ class Socket:
         self.sock.settimeout(RETX_TIME)
         self.timeout = GLOBAL_TIMEOUT
 
-        self.base = MAX_SEQNO # Last ACKed seqNumber
+        self.base = 0 # Last ACKed seqNumber
         self.seqNum = self.base
 
         self.inSeq = inSeq # Next seq number to be received 

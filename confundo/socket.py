@@ -32,10 +32,10 @@ class Socket:
         self.sock.settimeout(RETX_TIME)
         self.timeout = GLOBAL_TIMEOUT
 
-        self.base = MAX_SEQNO
-        self.seqNum = self.base
+        self.base = MAX_SEQNO # Last packet from this side that has been ACK'd
+        self.seqNum = self.base  # Self explanatory
 
-        self.inSeq = inSeq
+        self.inSeq = inSeq # bytes received from other side / serves as a ACK to be sent
 
         self.lastAckTime = time.time() # last time ACK was sent / activity timer
         self.cc = CwndControl()
@@ -95,7 +95,7 @@ class Socket:
             pkt = self._recv()
             if pkt and pkt.isSyn:
                 hadNewConnId = True
-                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=increaseSeqNumber(pkt.seqNum), noClose=True)
+                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=self.inSeq, noClose=True)
                 # at this point, syn was received, ack for syn was sent, now need to send our SYN and wait for ACK
                 clientSock._connect(self.lastFromAddr)
                 return clientSock
@@ -126,7 +126,8 @@ class Socket:
 
         outPkt = None
         if inPkt.isSyn: 
-            self.inSeq = increaseSeqNumber(inPkt.seqNum)
+            # print("DEBUG: HERE????" )
+            self.inSeq = 1
             if inPkt.connId != 0:
                 self.connId = inPkt.connId
             self.synReceived = True
@@ -136,15 +137,16 @@ class Socket:
 
         elif inPkt.isFin:
             if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
-                self.inSeq = increaseSeqNumber(inPkt.seqNum)
+                self.inSeq = increaseSeqNumber(self.inSeq, 1)
                 self.finReceived = True
             else:
                 # don't advance, which means we will send a duplicate ACK
                 pass
 
-            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
+            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True, isFin=(not self.finReceived))
 
         elif len(inPkt.payload) > 0:
+            # print("DEBUG: HERE " + str(self.inSeq) + " =?= " + str(inPkt.seqNum))
             if not self.synReceived:
                 raise RuntimeError("Receiving data before SYN received")
 
@@ -152,18 +154,16 @@ class Socket:
                 raise RuntimeError("Received data after getting FIN (incoming connection closed)")
 
             if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
-                self.inSeq = increaseSeqNumber(inPkt.seqNum)
+                self.inSeq = increaseSeqNumber(self.inSeq, len(inPkt.payload))
+                # print("DEBUG: " + str(self.inSeq))
                 self.inBuffer += inPkt.payload
             else:
                 # don't advance, which means we will send a duplicate ACK
                 pass
 
             outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
-        elif inPkt.isAck:
-            self.inSeq = increaseSeqNumber(inPkt.seqNum)
 
         if outPkt:
-            self.seqNum = increaseSeqNumber(self.seqNum)
             self._send(outPkt)
             
         return inPkt
@@ -191,12 +191,12 @@ class Socket:
     def sendSynPacket(self):
         synPkt = Packet(
             seqNum = self.seqNum,
-            ackNum = self.inSeq if self.synReceived else 0,
-            connId= self.connId if self.synReceived else 0, 
+            ackNum = 1 if self.synReceived else 0,
+            connId= self.connId, 
             isSyn = True, 
             isAck = self.synReceived
         )
-        self.seqNum = increaseSeqNumber(self.seqNum)
+        self.seqNum = increaseSeqNumber(self.seqNum, 1)
         self._send(synPkt)
 
     def expectSynAck(self):
@@ -204,7 +204,7 @@ class Socket:
         startTime = time.time()        
         while True:
             pkt = self._recv()
-            if pkt and pkt.isAck and (pkt.ackNum == self.seqNum or (pkt.isSyn and pkt.ackNum == self.seqNum - 1)):
+            if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
                 self.state = State.OPEN
                 break
@@ -214,7 +214,7 @@ class Socket:
 
     def sendFinPacket(self):
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isFin=True)
-        self.seqNum = increaseSeqNumber(self.seqNum)
+        self.seqNum = increaseSeqNumber(self.seqNum, 1)
         self._send(synPkt)
 
     def expectFinAck(self):
@@ -228,7 +228,6 @@ class Socket:
                 break
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 return
-
 
     def recv(self, maxSize):
         startTime = time.time()
@@ -266,20 +265,20 @@ class Socket:
         while len(self.outBuffer) > 0:
             toSend = self.outBuffer[:MTU]
             pkt = Packet(seqNum=self.base, connId=self.connId, payload=toSend)
-            self.seqNum = increaseSeqNumber(self.seqNum)
+            self.seqNum = increaseSeqNumber(self.base, len(pkt.payload))
             self._send(pkt)
 
             pkt = self._recv()  # if within RTO we didn't receive packets, things will be retransmitted
             if pkt and pkt.isAck:
                 # TODO: FIX THIS
-                advanceAmount = MTU
+                advanceAmount = pkt.ackNum - self.base
                 if advanceAmount == 0:
                     self.nDupAcks += 1
                 else:
                     self.nDupAcks = 0
 
                 self.outBuffer = self.outBuffer[advanceAmount:]
-                self.base = self.seqNum
+                self.base = pkt.ackNum
 
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR

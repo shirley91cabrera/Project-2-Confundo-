@@ -127,13 +127,11 @@ class Socket:
         outPkt = None
         if inPkt.isSyn: 
             # print("DEBUG: HERE????" )
-            self.inSeq = 1
+            self.inSeq = increaseSeqNumber(inPkt.seqNum, 1)
             if inPkt.connId != 0:
                 self.connId = inPkt.connId
             self.synReceived = True
-
-            if self.remote is not None: # Avoid sendind just ACK from the server during handshake
-                outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
+            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
         elif inPkt.isFin:
             if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
@@ -174,10 +172,12 @@ class Socket:
         if self.state != State.INVALID:
             raise RuntimeError("Trying to connect, but socket is already opened")
 
+        # print("DEBUG: SEND SYN????")
         self.sendSynPacket()
         self.state = State.SYN
 
         self.expectSynAck()
+        # print("DEBUG: RECV SYN ACK????")
 
     def close(self):
         if self.state != State.OPEN:
@@ -189,13 +189,7 @@ class Socket:
         self.expectFinAck()
 
     def sendSynPacket(self):
-        synPkt = Packet(
-            seqNum = self.seqNum,
-            ackNum = 1 if self.synReceived else 0,
-            connId= self.connId, 
-            isSyn = True, 
-            isAck = self.synReceived
-        )
+        synPkt = Packet(seqNum = self.seqNum, connId= self.connId, isSyn = True)
         self.seqNum = increaseSeqNumber(self.seqNum, 1)
         self._send(synPkt)
 
@@ -207,6 +201,7 @@ class Socket:
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
                 self.state = State.OPEN
+            if self.synReceived and self.state == State.OPEN:
                 break
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR

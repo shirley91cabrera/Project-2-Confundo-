@@ -9,5 +9,5 @@ def format_line(command, pkt, cwnd, ssthresh):
     return s
 
 
-def increaseSeqNumber(seqNumber):
-    return (seqNumber + 1) % MAX_SEQNO 
+def increaseSeqNumber(seqNumber, bytes):
+    return (seqNumber + bytes) % (MAX_SEQNO + 1)

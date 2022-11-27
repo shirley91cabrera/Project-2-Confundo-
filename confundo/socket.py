@@ -110,7 +110,7 @@ class Socket:
             self.sock.sendto(packet.encode(), self.remote)
         else:
             self.sock.sendto(packet.encode(), self.lastFromAddr)
-        print(format_line("SEND", packet, -1, -1))
+        print(format_line("SEND", packet, self.cc.cwnd, self.cc.ssthresh))
 
     def _recv(self):
         '''"Private" method to receive incoming packets'''
@@ -121,7 +121,7 @@ class Socket:
             return None
 
         inPkt = Packet().decode(inPacket)
-        print(format_line("RECV", inPkt, -1, -1))
+        print(format_line("RECV", inPkt, self.cc.cwnd, self.cc.ssthresh))
 
 
         outPkt = None

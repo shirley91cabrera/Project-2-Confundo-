@@ -126,7 +126,6 @@ class Socket:
 
         outPkt = None
         if inPkt.isSyn: 
-            # print("DEBUG: HERE????" )
             self.inSeq = increaseSeqNumber(inPkt.seqNum, 1)
             if inPkt.connId != 0:
                 self.connId = inPkt.connId
@@ -141,10 +140,9 @@ class Socket:
                 # don't advance, which means we will send a duplicate ACK
                 pass
 
-            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True, isFin=(not self.finReceived))
+            outPkt = Packet(seqNum=self.seqNum, ackNum=self.inSeq, connId=self.connId, isAck=True)
 
         elif len(inPkt.payload) > 0:
-            # print("DEBUG: HERE " + str(self.inSeq) + " =?= " + str(inPkt.seqNum))
             if not self.synReceived:
                 raise RuntimeError("Receiving data before SYN received")
 
@@ -153,7 +151,6 @@ class Socket:
 
             if self.inSeq == inPkt.seqNum: # all previous packets has been received, so safe to advance
                 self.inSeq = increaseSeqNumber(self.inSeq, len(inPkt.payload))
-                # print("DEBUG: " + str(self.inSeq))
                 self.inBuffer += inPkt.payload
             else:
                 # don't advance, which means we will send a duplicate ACK
@@ -172,12 +169,10 @@ class Socket:
         if self.state != State.INVALID:
             raise RuntimeError("Trying to connect, but socket is already opened")
 
-        # print("DEBUG: SEND SYN????")
         self.sendSynPacket()
         self.state = State.SYN
 
         self.expectSynAck()
-        # print("DEBUG: RECV SYN ACK????")
 
     def close(self):
         if self.state != State.OPEN:
@@ -194,7 +189,6 @@ class Socket:
         self._send(synPkt)
 
     def expectSynAck(self):
-        ### MAY NEED FIXES IN THIS METHOD
         startTime = time.time()        
         while True:
             pkt = self._recv()
@@ -213,15 +207,13 @@ class Socket:
         self._send(synPkt)
 
     def expectFinAck(self):
-        ### MAY NEED FIXES IN THIS METHOD
-        startTime = time.time()
         while True:
             pkt = self._recv()
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
+                startTime = time.time()
+            if time.time() - startTime > FIN_WAIT_TIME:
                 self.state = State.CLOSED
-                break
-            if time.time() - startTime > GLOBAL_TIMEOUT:
                 return
 
     def recv(self, maxSize):
@@ -252,7 +244,7 @@ class Socket:
         '''
 
         if self.state != State.OPEN:
-            raise RuntimeError("Trying to send FIN, but socket is not in OPEN state")
+            raise RuntimeError("Trying to send data, but socket is not in OPEN state")
 
         self.outBuffer += data
 

@@ -1,5 +1,7 @@
 from .common import *
 
+MOD = (MAX_SEQNO + 1)
+
 def format_line(command, pkt, cwnd, ssthresh):
     s = f"{command} {pkt.seqNum} {pkt.ackNum} {pkt.connId} {int(cwnd)} {ssthresh}"
     if pkt.isAck: s = s + " ACK"
@@ -10,4 +12,8 @@ def format_line(command, pkt, cwnd, ssthresh):
 
 
 def increaseSeqNumber(seqNumber, bytes):
-    return (seqNumber + bytes) % (MAX_SEQNO + 1)
+    return (seqNumber + bytes) % MOD
+
+
+def modSubtract(a, b):
+    return (MOD + (a - b)) % MOD

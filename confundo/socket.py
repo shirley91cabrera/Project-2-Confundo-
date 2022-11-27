@@ -207,12 +207,19 @@ class Socket:
         self._send(synPkt)
 
     def expectFinAck(self):
+        startTime = time.time()
+        finWaitTime = None
         while True:
             pkt = self._recv()
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
-                startTime = time.time()
-            if time.time() - startTime > FIN_WAIT_TIME:
+                finWaitTime = time.time()
+
+            if time.time() - startTime > GLOBAL_TIMEOUT:
+                self.state = State.ERROR
+                raise RuntimeError("timeout")
+
+            if finWaitTime and time.time() - finWaitTime > FIN_WAIT_TIME:
                 self.state = State.CLOSED
                 return
 
@@ -233,13 +240,33 @@ class Socket:
 
             return response
 
+    def _bulkSend(self, reset):
+        if reset:
+            self.seqNum = self.base
+        data_sent = modSubtract(self.seqNum, self.base)
+        # print("DEBUG: data_sent: " + str(self.seqNum) + " - " + str(self.base) + " = " + str(data_sent))
+        bytes_sent = 0
+        while True: 
+            toSend = self.outBuffer[data_sent: data_sent + MTU]
+            if (self.cc.cwnd - data_sent) < len(toSend) or len(toSend) == 0:
+                return bytes_sent
+            pkt = Packet(seqNum=self.seqNum, connId=self.connId, payload=toSend)
+            self.seqNum = increaseSeqNumber(self.seqNum, len(pkt.payload))
+            # print("DEBUG increaseSeqNumber : " + str(self.seqNum))
+            self._send(pkt)
+            data_sent += len(pkt.payload)
+            bytes_sent += len(pkt.payload)
+
+        return bytes_sent
+
+
     def send(self, data):
         '''
         This is one of the methods that require fixes.  Besides the marked place where you need
         to figure out proper updates (to make basic transfer work), this method is the place
-        where you should initate congestion control operations.   You can either directly update cwnd, ssthresh,
-        and anything else you need or use CwndControl class, up to you.  There isn't any skeleton code for the
-        congestion control operations.  You would need to update things here and in `format_msg` calls
+        where you should initate congestion control operations. You can either directly update cwnd, ssthresh,
+        and anything else you need or use CwndControl class, up to you. There isn't any skeleton code for the
+        congestion control operations. You would need to update things here and in `format_msg` calls
         in this file to properly print values.
         '''
 
@@ -247,21 +274,23 @@ class Socket:
             raise RuntimeError("Trying to send data, but socket is not in OPEN state")
 
         self.outBuffer += data
-
-        startTime = time.time()
+        re_transmit = True
         while len(self.outBuffer) > 0:
-            toSend = self.outBuffer[:MTU]
-            pkt = Packet(seqNum=self.base, connId=self.connId, payload=toSend)
-            self.seqNum = increaseSeqNumber(self.base, len(pkt.payload))
-            self._send(pkt)
+            # print("DEBUG start round : " + str(self.seqNum) + " " + str(re_transmit))
+            bytes_sent = self._bulkSend(re_transmit)
+            # print("DEBUG bytes_sent : " + str(bytes_sent))
+            if bytes_sent > 0:
+                re_transmit = False
+                startTime = time.time()
 
-            pkt = self._recv()  # if within RTO we didn't receive packets, things will be retransmitted
+            pkt = self._recv()  
             if pkt and pkt.isAck:
-                # TODO: FIX THIS
                 advanceAmount = pkt.ackNum - self.base
                 if advanceAmount == 0:
                     self.nDupAcks += 1
                 else:
+                    self.cc.on_ack()
+                    startTime = time.time()
                     self.nDupAcks = 0
 
                 self.outBuffer = self.outBuffer[advanceAmount:]
@@ -270,5 +299,9 @@ class Socket:
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR
                 raise RuntimeError("timeout")
+
+            if time.time() - startTime > RETX_TIME: # if within RTO we didn't receive packets, things will be retransmitted
+                self.cc.on_timeout()
+                re_transmit = True
 
         return len(data)

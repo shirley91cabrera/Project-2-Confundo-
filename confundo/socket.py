@@ -4,6 +4,7 @@ from enum import Enum
 import socket
 import sys
 import time
+# from random import randrange
 
 from .common import *
 from .packet import Packet
@@ -32,7 +33,7 @@ class Socket:
         self.sock.settimeout(RETX_TIME)
         self.timeout = GLOBAL_TIMEOUT
 
-        self.base = MAX_SEQNO # Last packet from this side that has been ACK'd
+        self.base = MAX_SEQNO # Last packet from this side that has been ACKå'd
         self.seqNum = self.base  # Self explanatory
 
         self.inSeq = inSeq # bytes received from other side / serves as a ACK to be sent
@@ -105,6 +106,11 @@ class Socket:
 
     def _send(self, packet):
         '''"Private" method to send packet out'''
+
+        # delay = randrange(2)
+
+        # if delay == 0:
+        #     time.sleep(1)
 
         if self.remote:
             self.sock.sendto(packet.encode(), self.remote)
@@ -240,8 +246,8 @@ class Socket:
 
             return response
 
-    def _bulkSend(self, reset):
-        if reset:
+    def _bulkSend(self, retransmit):
+        if retransmit:
             self.seqNum = self.base
         data_sent = modSubtract(self.seqNum, self.base)
         # print("DEBUG: data_sent: " + str(self.seqNum) + " - " + str(self.base) + " = " + str(data_sent))
@@ -250,7 +256,7 @@ class Socket:
             toSend = self.outBuffer[data_sent: data_sent + MTU]
             if (self.cc.cwnd - data_sent) < len(toSend) or len(toSend) == 0:
                 return bytes_sent
-            pkt = Packet(seqNum=self.seqNum, connId=self.connId, payload=toSend)
+            pkt = Packet(seqNum=self.seqNum, connId=self.connId, payload=toSend, isDup=retransmit)
             self.seqNum = increaseSeqNumber(self.seqNum, len(pkt.payload))
             # print("DEBUG increaseSeqNumber : " + str(self.seqNum))
             self._send(pkt)
@@ -274,13 +280,13 @@ class Socket:
             raise RuntimeError("Trying to send data, but socket is not in OPEN state")
 
         self.outBuffer += data
-        re_transmit = True
+        retransmit = False
         while len(self.outBuffer) > 0:
-            # print("DEBUG start round : " + str(self.seqNum) + " " + str(re_transmit))
-            bytes_sent = self._bulkSend(re_transmit)
+            # print("DEBUG start round : " + str(self.seqNum) + " " + str(retransmit))
+            bytes_sent = self._bulkSend(retransmit)
             # print("DEBUG bytes_sent : " + str(bytes_sent))
             if bytes_sent > 0:
-                re_transmit = False
+                retransmit = False
                 startTime = time.time()
 
             pkt = self._recv()  
@@ -302,6 +308,6 @@ class Socket:
 
             if time.time() - startTime > RETX_TIME: # if within RTO we didn't receive packets, things will be retransmitted
                 self.cc.on_timeout()
-                re_transmit = True
+                retransmit = True
 
         return len(data)

@@ -4,7 +4,6 @@ from enum import Enum
 import socket
 import sys
 import time
-# from random import randrange
 
 from .common import *
 from .packet import Packet
@@ -21,9 +20,6 @@ class State(Enum):
     CLOSED = 20
     ERROR = 21
 
-# class TimeoutError:
-#     pass
-
 class Socket:
     '''Incomplete socket abstraction for Confundo protocol'''
 
@@ -33,7 +29,7 @@ class Socket:
         self.sock.settimeout(RETX_TIME)
         self.timeout = GLOBAL_TIMEOUT
 
-        self.base = MAX_SEQNO # Last packet from this side that has been ACKå'd
+        self.base = MAX_SEQNO # Last packet from this side that has been ACK'd
         self.seqNum = self.base  # Self explanatory
 
         self.inSeq = inSeq # bytes received from other side / serves as a ACK to be sent
@@ -105,13 +101,6 @@ class Socket:
         self.timeout = timeout
 
     def _send(self, packet):
-        '''"Private" method to send packet out'''
-
-        # delay = randrange(2)
-
-        # if delay == 0:
-        #     time.sleep(1)
-
         if self.remote:
             self.sock.sendto(packet.encode(), self.remote)
         else:
@@ -128,7 +117,6 @@ class Socket:
 
         inPkt = Packet().decode(inPacket)
         print(format_line("RECV", inPkt, self.cc.cwnd, self.cc.ssthresh))
-
 
         outPkt = None
         if inPkt.isSyn: 
@@ -250,7 +238,6 @@ class Socket:
         if retransmit:
             self.seqNum = self.base
         data_sent = modSubtract(self.seqNum, self.base)
-        # print("DEBUG: data_sent: " + str(self.seqNum) + " - " + str(self.base) + " = " + str(data_sent))
         bytes_sent = 0
         while True: 
             toSend = self.outBuffer[data_sent: data_sent + MTU]
@@ -258,13 +245,11 @@ class Socket:
                 return bytes_sent
             pkt = Packet(seqNum=self.seqNum, connId=self.connId, payload=toSend, isDup=retransmit)
             self.seqNum = increaseSeqNumber(self.seqNum, len(pkt.payload))
-            # print("DEBUG increaseSeqNumber : " + str(self.seqNum))
             self._send(pkt)
             data_sent += len(pkt.payload)
             bytes_sent += len(pkt.payload)
 
         return bytes_sent
-
 
     def send(self, data):
         '''
@@ -282,9 +267,7 @@ class Socket:
         self.outBuffer += data
         retransmit = False
         while len(self.outBuffer) > 0:
-            # print("DEBUG start round : " + str(self.seqNum) + " " + str(retransmit))
             bytes_sent = self._bulkSend(retransmit)
-            # print("DEBUG bytes_sent : " + str(bytes_sent))
             if bytes_sent > 0:
                 retransmit = False
                 startTime = time.time()

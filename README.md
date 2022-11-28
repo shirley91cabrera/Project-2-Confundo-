@@ -27,6 +27,8 @@ To dissect tcpdump-recorded file, you can use `-r <pcapfile>` option. For exampl
 ## Project Report
 
    * Shirley Cabrera, PID: 6119474
-   * Hgh Level Design: Followed provided esqueleton.
-   * Did not run into any problem. Jusat struggle with make the concepts work for both client and server.
-   * Did not added any new library nor used any external sources.
+   * High Level Design: On the `send` method, within the while loop I keep dispatching new packets as the ACK's come in and the window increases instead of waiting for the previous window to be completely "used", for this I keep the outbuffer (only decreasing it with the ACK's) and use the modular difference between the `seqNum` and the `base` to know what data to send. Other than that I just followed provided esqueleton.
+   * Did not run into any major problem, just initially struggled with making the concepts work for both client and server.
+   * Aknwowledgements:
+    * For sequence and ack number undertanding used: https://packetlife.net/blog/2010/jun/7/understanding-tcp-sequence-acknowledgment-numbers/
+    * For occasionally checking python api usage used https://stackoverflow.com

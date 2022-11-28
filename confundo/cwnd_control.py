@@ -19,7 +19,7 @@ class CwndControl:
 
 
     def on_timeout(self):
-        self.ssthresh = self.cwnd
+        self.ssthresh = self.cwnd / 2.0
         self.cwnd = 1.0 * MTU
 
     def __str__(self):
